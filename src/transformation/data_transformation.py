@@ -26,10 +26,16 @@ class DataTransformer:
     
     def _download_nltk_resources(self):
         required_resources = ['punkt', 'stopwords', 'wordnet']
-        
+
         for resource in required_resources:
             try:
-                nltk.data.find(f'tokenizers/{resource}')
+                # Usar paths correctos para cada recurso
+                if resource == 'stopwords':
+                    nltk.data.find(f'corpora/{resource}')
+                elif resource == 'wordnet':
+                    nltk.data.find(f'corpora/{resource}')
+                else:
+                    nltk.data.find(f'tokenizers/{resource}')
             except LookupError:
                 print(f"Descargando recurso NLTK: {resource} ...")
                 nltk.download(resource, quiet=True)

@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorador de Conocimiento</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="static/vendor/vis-network.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background-color: #282C33;  /* Editor background */
+            color: #DCE0E5;  /* Primary text */
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #464B57;  /* Borders */
+            background-color: #282C33;  /* Editor background */
+        }
+
+        .right-panel {
+            flex: 1;
+            background-color: #282C33;
+            position: relative;
+        }
+
+        .header {
+            padding: 8px 16px;
+            background-color: #3B414D;  /* Title bar */
+            border-bottom: 1px solid #464B57;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 32px;
+        }
+
+        .header h1 {
+            font-size: 13px;
+            font-weight: 500;
+            color: #DCE0E5;
+        }
+
+        .header .status {
+            font-size: 11px;
+            color: #A9AFBC;  /* Secondary text */
+        }
+
+        .content-area {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            background-color: #282C33;
+        }
+
+        .input-section {
+            margin-bottom: 16px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .file-upload-section {
+            margin-top: 16px;
+            padding: 16px;
+            background-color: #2F343E;
+            border-radius: 4px;
+            border: 1px dashed #464B57;
+            text-align: center;
+        }
+
+        .file-upload-section p {
+            color: #A9AFBC;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .file-upload-btn {
+            padding: 6px 12px;
+            background-color: #2F343E;
+            border: 1px solid #464B57;
+            border-radius: 4px;
+            color: #DCE0E5;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .file-upload-btn:hover {
+            border-color: #74ADE8;
+            color: #74ADE8;
+        }
+
+        .welcome-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .welcome-screen h2 {
+            color: #DCE0E5;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .welcome-screen p {
+            color: #A9AFBC;
+            font-size: 14px;
+            margin-bottom: 30px;
+            max-width: 400px;
+        }
+
+        .welcome-actions {
+            display: flex;
+            gap: 16px;
+        }
+
+        .welcome-btn {
+            padding: 12px 24px;
+            background-color: #74ADE8;
+            border: none;
+            border-radius: 6px;
+            color: #282C33;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .welcome-btn:hover {
+            background-color: #5A8BC4;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(116, 173, 232, 0.3);
+        }
+
+        .welcome-btn.secondary {
+            background-color: #2F343E;
+            border: 1px solid #464B57;
+            color: #DCE0E5;
+        }
+
+        .welcome-btn.secondary:hover {
+            border-color: #74ADE8;
+            color: #74ADE8;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 8px 12px;
+            background-color: #2F343E;  /* Panel background */
+            border: 1px solid #464B57;
+            border-radius: 4px;
+            color: #DCE0E5;
+            font-size: 13px;
+            font-family: 'IBM Plex Sans', sans-serif;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #74ADE8;  /* Accent color */
+        }
+
+        .input-group input::placeholder {
+            color: #A9AFBC;
+        }
+
+        .input-group button {
+            padding: 8px 16px;
+            background-color: #74ADE8;  /* Accent color */
+            border: none;
+            border-radius: 4px;
+            color: #282C33;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .input-group button:hover {
+            background-color: #5A8BC4;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(116, 173, 232, 0.3);
+        }
+
+        .input-group button:active {
+            transform: translateY(0);
+        }
+
+        .response-area {
+            background-color: #2F343E;  /* Panel background */
+            border-radius: 4px;
+            padding: 16px;
+            min-height: 300px;
+            border: 1px solid #464B57;
+            transition: all 0.3s ease;
+        }
+
+        .response-area:hover {
+            border-color: #74ADE8;
+        }
+
+        .response-area h3 {
+            color: #DCE0E5;
+            margin-bottom: 12px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .response-content {
+            line-height: 1.6;
+            color: #DCE0E5;
+            font-size: 13px;
+        }
+
+        .concepts-section {
+            margin-top: 16px;
+            padding: 12px;
+            background-color: #2F343E;
+            border-radius: 4px;
+            border: 1px solid #464B57;
+        }
+
+        .concepts-section h4 {
+            color: #DCE0E5;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .concepts-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .concept-tag {
+            background-color: #74ADE8;  /* Accent color */
+            color: #282C33;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .graph-container {
+            width: 100%;
+            height: 100%;
+            background-color: #282C33;
+        }
+
+        .graph-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #2F343E;  /* Panel background */
+            padding: 12px;
+            border-radius: 4px;
+            border: 1px solid #464B57;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            max-width: 300px;
+            display: none;
+        }
+
+        .graph-info.show {
+            display: block;
+        }
+
+        .graph-info h4 {
+            color: #DCE0E5;
+            margin-bottom: 8px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .graph-info .info-item {
+            margin: 6px 0;
+            font-size: 12px;
+            color: #A9AFBC;
+        }
+
+        .graph-info .info-item strong {
+            color: #74ADE8;  /* Accent color */
+        }
+
+        .chunk-item {
+            background-color: #282C33;
+            padding: 8px;
+            margin: 6px 0;
+            border-left: 2px solid #74ADE8;
+            border-radius: 3px;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #DCE0E5;
+        }
+
+        /* Loading screen */
+        .loading-screen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(40, 44, 51, 0.95);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .loading-screen.show {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #464B57;
+            border-top-color: #74ADE8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        .loading-text {
+            color: #DCE0E5;
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .loading-subtext {
+            color: #A9AFBC;
+            font-size: 13px;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #A9AFBC;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #74ADE8;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: #E06C75;  /* Error red */
+            padding: 10px;
+            background-color: rgba(224, 108, 117, 0.1);
+            border-radius: 4px;
+            margin-top: 10px;
+            border: 1px solid rgba(224, 108, 117, 0.3);
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: #2F343E;  /* Panel background */
+            border-radius: 6px;
+            width: 80%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+            border: 1px solid #464B57;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #464B57;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #3B414D;
+        }
+
+        .modal-header h3 {
+            color: #DCE0E5;
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #A9AFBC;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+        }
+
+        .modal-close:hover {
+            color: #DCE0E5;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .chunk-full {
+            background-color: #282C33;
+            padding: 12px;
+            margin: 8px 0;
+            border-left: 2px solid #74ADE8;
+            border-radius: 3px;
+            line-height: 1.6;
+            color: #DCE0E5;
+            font-size: 13px;
+            transition: all 0.2s ease;
+        }
+
+        .chunk-full:hover {
+            background-color: #2F343E;
+            border-left-color: #5A8BC4;
+        }
+
+        /* Highlight styles */
+        .highlighted {
+            border-width: 3px !important;
+        }
+
+        .highlighted-article {
+            border-color: #FFD700 !important;
+        }
+
+        .highlighted-entity {
+            border-color: #98C379 !important;
+        }
+
+        .highlighted-concept {
+            border-color: #61AFEF !important;
+        }
+
+        /* Scrollbar styling */
+        .content-area::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .content-area::-webkit-scrollbar-track {
+            background: #282C33;
+        }
+
+        .content-area::-webkit-scrollbar-thumb {
+            background: #464B57;
+            border-radius: 4px;
+        }
+
+        .content-area::-webkit-scrollbar-thumb:hover {
+            background: #5A5F6B;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Panel Izquierdo: Texto y Preguntas -->
+        <div class="left-panel">
+            <div class="header">
+                <h1>Explorador de Conocimiento</h1>
+                <div class="status" id="status">Listo</div>
+            </div>
+            <div class="content-area">
+                <!-- Pantalla de inicio -->
+                <div class="welcome-screen" id="welcomeScreen">
+                    <h2>Explorador de Conocimiento</h2>
+                    <p>Ingresa un tema para explorar artículos de Wikipedia o sube tus propios documentos.</p>
+
+                    <!-- Cuadro de texto para tema -->
+                    <div style="width: 100%; max-width: 500px; margin-bottom: 20px;">
+                        <input type="text" id="topicInput" placeholder="Ingresa un tema (ej: Satoru Iwata, Nintendo, Machine Learning)..." style="width: 100%; padding: 12px; background-color: #2F343E; border: 1px solid #464B57; border-radius: 4px; color: #DCE0E5; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;">
+                    </div>
+
+                    <!-- Área para subir archivos -->
+                    <div class="file-upload-section" style="width: 100%; max-width: 500px; margin-bottom: 20px;">
+                        <p>O sube tus propios documentos (.txt, .md, .pdf)</p>
+                        <input type="file" id="fileInput" multiple accept=".txt,.md,.pdf" style="display: none;">
+                        <button class="file-upload-btn" onclick="document.getElementById('fileInput').click()">Seleccionar Archivos</button>
+                        <div id="selectedFiles" style="margin-top: 10px; color: #A9AFBC; font-size: 12px;"></div>
+                    </div>
+
+                    <!-- Botón de inicio -->
+                    <button class="welcome-btn" onclick="startProcessing()" style="font-size: 16px; padding: 14px 32px;">Iniciar Exploración</button>
+                </div>
+
+                <!-- Área de preguntas (oculta inicialmente) -->
+                <div id="questionSection" style="display: none;">
+                    <div class="input-section">
+                        <div class="input-group">
+                            <input type="text" id="queryInput" placeholder="Haz una pregunta sobre el tema...">
+                            <button onclick="processQuery()">Preguntar</button>
+                        </div>
+                    </div>
+
+                    <div class="response-area">
+                        <h3>Respuesta</h3>
+                        <div class="response-content" id="responseContent">
+                            <p>Escribe una pregunta para comenzar...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Derecho: Grafo -->
+        <div class="right-panel">
+            <div id="graph" class="graph-container"></div>
+            <div class="graph-info" id="graphInfo">
+                <h4>Información del Nodo</h4>
+                <div id="nodeInfoContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Procesando tema...</div>
+        <div class="loading-subtext" id="loadingSubtext">Esto puede tomar unos minutos</div>
+    </div>
+
+    <!-- Modal para mostrar chunks -->
+    <div class="modal" id="chunkModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Información del Nodo</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Contenido dinámico -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let network = null;
+        let nodes = null;
+        let edges = null;
+        let graphData = null;
+        let currentHighlightedNodes = [];
+        let currentRelevantChunks = [];
+        let isProcessing = false;
+        let selectedFiles = [];
+
+        // Inicializar la aplicación
+        window.onload = function() {
+            setupEventListeners();
+        };
+
+        function setupEventListeners() {
+            // Enter para enviar pregunta
+            document.getElementById('queryInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    processQuery();
+                }
+            });
+
+            // Enter para iniciar con tema
+            document.getElementById('topicInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    startProcessing();
+                }
+            });
+
+            // Manejar selección de archivos
+            document.getElementById('fileInput').addEventListener('change', function(e) {
+                selectedFiles = Array.from(e.target.files);
+                updateSelectedFilesDisplay();
+            });
+        }
+
+        function updateSelectedFilesDisplay() {
+            const display = document.getElementById('selectedFiles');
+            if (selectedFiles.length === 0) {
+                display.textContent = '';
+            } else {
+                display.textContent = `${selectedFiles.length} archivo(s) seleccionado(s): ${selectedFiles.map(f => f.name).join(', ')}`;
+            }
+        }
+
+        async function startProcessing() {
+            const topic = document.getElementById('topicInput').value.trim();
+
+            if (!topic && selectedFiles.length === 0) {
+                alert('Por favor ingresa un tema o selecciona archivos');
+                return;
+            }
+
+            isProcessing = true;
+
+            // Mostrar pantalla de carga
+            document.getElementById('loadingScreen').classList.add('show');
+            document.getElementById('loadingText').textContent = topic ? `Procesando tema: ${topic}` : 'Procesando archivos...';
+            document.getElementById('loadingSubtext').textContent = 'Esto puede tomar unos minutos...';
+
+            try {
+                // Si hay tema, procesar con pipeline
+                if (topic) {
+                    document.getElementById('loadingSubtext').textContent = 'Extrayendo artículos de Wikipedia...';
+                    await processTopic(topic);
+
+                    document.getElementById('loadingSubtext').textContent = 'Generando embeddings y NER...';
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Simular delay
+                }
+
+                // Si hay archivos, procesarlos
+                if (selectedFiles.length > 0) {
+                    document.getElementById('loadingSubtext').textContent = 'Procesando archivos...';
+                    await processFiles();
+                }
+
+                document.getElementById('loadingSubtext').textContent = 'Generando grafo de relaciones...';
+
+                // Generar grafo y mostrar área de preguntas
+                await loadGraphData();
+                // initializeGraph() ya se llama dentro de loadGraphData()
+
+                // Mostrar área de preguntas
+                document.getElementById('welcomeScreen').style.display = 'none';
+                document.getElementById('questionSection').style.display = 'block';
+                document.getElementById('status').textContent = 'Listo';
+
+            } catch (error) {
+                console.error('Error procesando:', error);
+                document.getElementById('status').textContent = 'Error';
+                alert('Error al procesar: ' + error.message);
+            } finally {
+                isProcessing = false;
+                // Ocultar pantalla de carga
+                document.getElementById('loadingScreen').classList.remove('show');
+            }
+        }
+
+        async function processTopic(topic) {
+            // Llamar a la API para procesar el tema
+            const response = await fetch(`/api/process_topic?topic=${encodeURIComponent(topic)}`);
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            return data;
+        }
+
+        async function processFiles() {
+            // Subir archivos
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            return data;
+        }
+
+        async function loadGraphData() {
+            try {
+                const response = await fetch('data/processed/graph_data.json');
+                if (response.ok) {
+                    graphData = await response.json();
+                    initializeGraph();
+                } else {
+                    console.log('No se encontró graph_data.json, creando datos de ejemplo...');
+                    createExampleData();
+                }
+            } catch (error) {
+                console.error('Error cargando datos del grafo:', error);
+                createExampleData();
+            }
+        }
+
+        function createExampleData() {
+            // Datos de ejemplo para demostración
+            graphData = {
+                nodes: [
+                    {id: '1', label: 'Satoru Iwata', type: 'article', color: '#FF6B6B'},
+                    {id: '2', label: 'Nintendo', type: 'article', color: '#FF6B6B'},
+                    {id: '3', label: 'Shigeru Miyamoto', type: 'entity', color: '#4ECDC4'},
+                    {id: '4', label: 'Wii', type: 'article', color: '#FF6B6B'},
+                    {id: '5', label: 'Video Game', type: 'concept', color: '#45B7D1'},
+                    {id: '6', label: 'Designer', type: 'concept', color: '#45B7D1'}
+                ],
+                edges: [
+                    {from: '1', to: '2', label: 'president'},
+                    {from: '1', to: '4', label: 'led development'},
+                    {from: '2', to: '3', label: 'employs'},
+                    {from: '3', to: '5', label: 'creates'},
+                    {from: '1', to: '5', label: 'industry'},
+                    {from: '1', to: '6', label: 'role'}
+                ]
+            };
+            initializeGraph();
+        }
+
+        function initializeGraph() {
+            if (!graphData) return;
+
+            // Verificar que vis esté disponible
+            if (typeof vis === 'undefined') {
+                console.error('vis-network no está disponible');
+                document.getElementById('graph').innerHTML = '<div style="padding: 20px; color: #E06C75;">Error: No se pudo cargar la librería de visualización</div>';
+                return;
+            }
+
+            // Crear datasets
+            nodes = new vis.DataSet(graphData.nodes);
+            edges = new vis.DataSet(graphData.edges);
+
+            // Configuración del grafo
+            const container = document.getElementById('graph');
+            const data = { nodes: nodes, edges: edges };
+
+            const options = {
+                nodes: {
+                    shape: 'dot',
+                    size: 8,  // Tamaño por defecto (el principal tiene size en los datos)
+                    font: {
+                        size: 9,
+                        color: '#A9AFBC',  // Secondary text color
+                        face: 'IBM Plex Sans'  // Usar IBM Plex Sans
+                    },
+                    borderWidth: 1,
+                    shadow: {
+                        enabled: false
+                    }
+                },
+                edges: {
+                    width: 1,  // Líneas finas
+                    color: {
+                        color: '#464B57',  // Color de bordes del tema
+                        highlight: '#74ADE8'  // Accent color
+                    },
+                    smooth: {
+                        type: 'continuous'
+                    },
+                    arrows: {
+                        to: {
+                            enabled: false
+                        }
+                    }
+                },
+                physics: {
+                    stabilization: {
+                        iterations: 200
+                    },
+                    barnesHut: {
+                        gravitationalConstant: -3000,  // Menos repulsión
+                        centralGravity: 0.2,           // Más atracción al centro
+                        springLength: 150,             // Menos distancia entre nodos
+                        springConstant: 0.02,          // Más fuerza de enlace
+                        damping: 0.15,                 // Más damping
+                        avoidOverlap: 0.5              // Menos separación
+                    }
+                },
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 200,
+                    navigationButtons: false,  // Deshabilitar botones de navegación
+                    keyboard: false,            // Deshabilitar teclado
+                    zoomView: true,             // Permitir zoom
+                    dragView: true              // Permitir arrastrar
+                }
+            };
+
+            // Crear el grafo
+            network = new vis.Network(container, data, options);
+
+            // Ajustar grafo al contenedor
+            setTimeout(function() {
+                network.fit({
+                    animation: {
+                        duration: 500,
+                        easingFunction: 'easeInOutQuad'
+                    }
+                });
+            }, 100);
+
+            // Evento de clic en nodo
+            network.on('click', function(params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    showNodeModal(nodeId);
+                }
+            });
+        }
+
+        // Ajustar grafo al cambiar tamaño de ventana
+        window.addEventListener('resize', function() {
+            if (network) {
+                network.redraw();
+                setTimeout(function() {
+                    network.fit({
+                        animation: {
+                            duration: 300,
+                            easingFunction: 'easeInOutQuad'
+                        }
+                    });
+                }, 100);
+            }
+        });
+
+        function cleanChunkText(text) {
+            // Eliminar referencias [1], [2], etc.
+            let cleaned = text.replace(/\[\d+\]/g, '');
+            // Eliminar links markdown [text](url)
+            cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+            // Eliminar tags HTML
+            cleaned = cleaned.replace(/<[^>]*>/g, '');
+            // Limpiar espacios extra
+            cleaned = cleaned.replace(/\s+/g, ' ').trim();
+            return cleaned;
+        }
+
+        function showNodeModal(nodeId) {
+            const node = nodes.get(nodeId);
+            if (!node) return;
+
+            const modal = document.getElementById('chunkModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+
+            modalTitle.textContent = node.label;
+
+            let html = '';
+            html += `<div class="info-item" style="margin-bottom: 15px;"><strong>Tipo:</strong> ${node.type}</div>`;
+
+            if (node.members && node.members.length > 0) {
+                html += `<div class="info-item" style="margin-bottom: 15px;"><strong>Artículos relacionados:</strong> ${node.members.join(', ')}</div>`;
+            }
+
+            if (node.chunks && node.chunks.length > 0) {
+                html += '<h4 style="color: #DCE0E5; margin: 20px 0 10px 0; font-size: 14px; font-weight: 600;">Contenido:</h4>';
+                node.chunks.forEach((chunk, idx) => {
+                    const cleanText = cleanChunkText(chunk);
+                    html += `<div class="chunk-full"><strong style="color: #74ADE8;">Párrafo ${idx + 1}:</strong><br>${cleanText}</div>`;
+                });
+            } else {
+                html += '<p style="color: #A9AFBC;">No hay contenido disponible para este nodo.</p>';
+            }
+
+            modalBody.innerHTML = html;
+            modal.classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('chunkModal').classList.remove('show');
+        }
+
+        function highlightRelevantNodes(relevantArticles) {
+            if (!nodes) return;
+            // Limpiar highlights anteriores
+            clearHighlights();
+
+            // Highlight nodos relevantes
+            nodes.forEach(node => {
+                if (relevantArticles.includes(node.label)) {
+                    let highlightClass = 'highlighted';
+                    if (node.type === 'article') {
+                        highlightClass += ' highlighted-article';
+                    } else if (node.type === 'entity') {
+                        highlightClass += ' highlighted-entity';
+                    } else if (node.type === 'concept') {
+                        highlightClass += ' highlighted-concept';
+                    }
+
+                    // Actualizar el nodo con highlight
+                    nodes.update({
+                        id: node.id,
+                        borderWidth: 4,
+                        color: {
+                            border: node.type === 'article' ? '#FFD700' :
+                                    node.type === 'entity' ? '#00FF00' : '#00BFFF',
+                            background: node.color,
+                            highlight: {
+                                border: '#FFD700',
+                                background: node.color
+                            }
+                        }
+                    });
+
+                    currentHighlightedNodes.push(node.id);
+                }
+            });
+        }
+
+        function clearHighlights() {
+            if (!nodes) return;
+            // Restaurar nodos a su estado original
+            nodes.forEach(node => {
+                nodes.update({
+                    id: node.id,
+                    borderWidth: 2,
+                    color: node.color
+                });
+            });
+            currentHighlightedNodes = [];
+        }
+
+        async function processQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) return;
+
+            // Mostrar loading
+            document.getElementById('status').textContent = 'Procesando...';
+            document.getElementById('responseContent').innerHTML = '<div class="loading">Procesando tu pregunta...</div>';
+
+            try {
+                clearHighlights();
+                // Llamar a la API del servidor con timeout de 3 minutos
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 180000);
+                const response = await fetch(`/api/ask?q=${encodeURIComponent(query)}`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Mostrar solo la respuesta
+                let answerHtml = data.answer || 'No se pudo generar una respuesta.';
+                if (data.source === 'general') {
+                    answerHtml += '<div style="margin-top: 12px; font-size: 11px; color: #A9AFBC; font-style: italic;">Respuesta basada en conocimiento general del modelo (no en los artículos procesados)</div>';
+                }
+                document.getElementById('responseContent').innerHTML = answerHtml;
+
+                // Highlight nodos relevantes solo si hay chunks con similitud suficiente
+                const relevantChunks = data.chunks ? data.chunks.filter(chunk => chunk.similarity > 0.2) : [];
+                if (relevantChunks.length > 0 && data.relevant_articles) {
+                    highlightRelevantNodes(data.relevant_articles);
+                } else {
+                    clearHighlights();
+                }
+
+            } catch (error) {
+                console.error('Error procesando pregunta:', error);
+                const msg = error.name === 'AbortError'
+                    ? 'La respuesta tardó demasiado. Intenta de nuevo.'
+                    : error.message;
+                document.getElementById('responseContent').innerHTML = `<div class="error">Error: ${msg}</div>`;
+            } finally {
+                document.getElementById('status').textContent = 'Listo';
+            }
+        }
+    </script>
+</body>
+</html>
