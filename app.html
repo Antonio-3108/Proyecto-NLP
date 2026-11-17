@@ -538,7 +538,10 @@
         <div class="left-panel">
             <div class="header">
                 <h1>Explorador de Conocimiento</h1>
-                <div class="status" id="status">Listo</div>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <div class="status" id="status">Listo</div>
+                    <button id="newExplorationBtn" onclick="resetExploration()" style="display: none; padding: 6px 14px; background-color: #2F343E; border: 1px solid #464B57; border-radius: 4px; color: #DCE0E5; font-size: 12px; font-family: 'IBM Plex Sans', sans-serif; cursor: pointer;">Nueva Exploración</button>
+                </div>
             </div>
             <div class="content-area">
                 <!-- Pantalla de inicio -->
@@ -619,6 +622,8 @@
         let edges = null;
         let graphData = null;
         let currentHighlightedNodes = [];
+        let currentHighlightedEdges = [];
+        let nodeOriginals = {};
         let currentRelevantChunks = [];
         let isProcessing = false;
         let selectedFiles = [];
@@ -701,6 +706,7 @@
                 document.getElementById('welcomeScreen').style.display = 'none';
                 document.getElementById('questionSection').style.display = 'block';
                 document.getElementById('status').textContent = 'Listo';
+                document.getElementById('newExplorationBtn').style.display = 'inline-block';
 
             } catch (error) {
                 console.error('Error procesando:', error);
@@ -813,6 +819,13 @@
             // Crear datasets
             nodes = new vis.DataSet(graphData.nodes);
             edges = new vis.DataSet(graphData.edges);
+
+            // Guardar estilos originales de nodos para restaurarlos
+            // (node.color cambia al aplicar highlight, hay que guardar copia)
+            nodeOriginals = {};
+            nodes.forEach(n => {
+                nodeOriginals[n.id] = { color: n.color, borderWidth: n.borderWidth };
+            });
 
             // Configuración del grafo
             const container = document.getElementById('graph');
@@ -959,6 +972,8 @@
             // Limpiar highlights anteriores
             clearHighlights();
 
+            const highlightedIds = [];
+
             // Highlight nodos relevantes
             nodes.forEach(node => {
                 if (relevantArticles.includes(node.label)) {
@@ -986,22 +1001,90 @@
                         }
                     });
 
-                    currentHighlightedNodes.push(node.id);
+                    highlightedIds.push(node.id);
                 }
             });
+
+            currentHighlightedNodes = highlightedIds;
+
+            if (highlightedIds.length === 0) return;
+
+            // Zoom al área de los nodos resaltados
+            if (network) {
+                setTimeout(() => {
+                    network.fit({
+                        nodes: highlightedIds,
+                        animation: {
+                            duration: 600,
+                            easingFunction: 'easeInOutQuad'
+                        }
+                    });
+                }, 50);
+            }
         }
 
         function clearHighlights() {
             if (!nodes) return;
-            // Restaurar nodos a su estado original
+            // Restaurar nodos a su estado ORIGINAL guardado al crear el grafo
+            // (node.color ya no sirve: vis-network lo muta al aplicar highlight)
             nodes.forEach(node => {
+                const orig = nodeOriginals[node.id] || {};
                 nodes.update({
                     id: node.id,
-                    borderWidth: 2,
-                    color: node.color
+                    borderWidth: orig.borderWidth !== undefined ? orig.borderWidth : 1,
+                    color: orig.color !== undefined ? orig.color : node.color
                 });
             });
             currentHighlightedNodes = [];
+            currentHighlightedEdges = [];
+        }
+
+        async function resetExploration() {
+            if (!confirm('¿Iniciar una nueva exploración?\n\nSe eliminarán los documentos subidos y todos los datos procesados (artículos de Wikipedia y grafo).')) {
+                return;
+            }
+
+            try {
+                document.getElementById('status').textContent = 'Reiniciando...';
+                const response = await fetch('/api/reset', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Resetear la interfaz a la pantalla de bienvenida
+                document.getElementById('questionSection').style.display = 'none';
+                document.getElementById('welcomeScreen').style.display = 'block';
+                document.getElementById('topicInput').value = '';
+                document.getElementById('queryInput').value = '';
+                document.getElementById('responseContent').innerHTML = '<p>Escribe una pregunta para comenzar...</p>';
+                document.getElementById('newExplorationBtn').style.display = 'none';
+                document.getElementById('status').textContent = 'Listo';
+
+                // Limpiar archivos seleccionados
+                selectedFiles = [];
+                document.getElementById('fileInput').value = '';
+                document.getElementById('selectedFiles').textContent = '';
+
+                // Destruir el grafo
+                if (network) {
+                    network.destroy();
+                    network = null;
+                    nodes = null;
+                    edges = null;
+                    nodeOriginals = {};
+                }
+                const graphContainer = document.getElementById('graph');
+                if (graphContainer) graphContainer.innerHTML = '';
+                const nodeInfo = document.getElementById('nodeInfoContent');
+                if (nodeInfo) nodeInfo.innerHTML = '';
+
+            } catch (error) {
+                console.error('Error reiniciando:', error);
+                document.getElementById('status').textContent = 'Error';
+                alert('Error al reiniciar: ' + error.message);
+            }
         }
 
         async function processQuery() {
@@ -1034,10 +1117,42 @@
                 }
                 document.getElementById('responseContent').innerHTML = answerHtml;
 
-                // Highlight nodos relevantes solo si hay chunks con similitud suficiente
-                const relevantChunks = data.chunks ? data.chunks.filter(chunk => chunk.similarity > 0.2) : [];
-                if (relevantChunks.length > 0 && data.relevant_articles) {
-                    highlightRelevantNodes(data.relevant_articles);
+                // Highlight solo de los artículos realmente relevantes.
+                // Se combina similitud del mejor chunk con coincidencia de
+                // título (si el usuario nombra un nodo, debe resaltarse).
+                const chunks = data.chunks || [];
+                const bestByArticle = {};
+                chunks.forEach(c => {
+                    if (!c.article) return;
+                    bestByArticle[c.article] = Math.max(bestByArticle[c.article] || 0, c.similarity || 0);
+                });
+                const queryTerms = new Set(
+                    query.toLowerCase()
+                        .replace(/[^a-záéíóúñü0-9 ]/g, ' ')
+                        .split(/\s+/)
+                        .filter(w => w.length > 3)
+                );
+                const scored = Object.keys(bestByArticle).map(a => {
+                    const labelWords = a.toLowerCase()
+                        .split(/[^a-záéíóúñü0-9]+/)
+                        .filter(w => w.length > 2);
+                    const hits = labelWords.filter(w => queryTerms.has(w)).length;
+                    const titleScore = labelWords.length ? hits / labelWords.length : 0;
+                    return {
+                        article: a,
+                        score: bestByArticle[a] + 0.25 * titleScore
+                    };
+                });
+                const topScore = scored.length ? Math.max(...scored.map(s => s.score)) : 0;
+                const threshold = Math.max(0.25, topScore * 0.5);
+                const relevantArticles = scored
+                    .filter(s => s.score >= threshold)
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, 4)
+                    .map(s => s.article);
+
+                if (relevantArticles.length > 0) {
+                    highlightRelevantNodes(relevantArticles);
                 } else {
                     clearHighlights();
                 }

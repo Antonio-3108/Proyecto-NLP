@@ -325,6 +325,9 @@ def generate_graph_data(chunks_path: str, entities_path: str, transformed_path: 
     print(f"  Conceptos filtrados: {sum(len(v) for v in concepts.values())}")
 
     # Cargar títulos de artículos (ordenar para que el principal esté primero)
+    # Los artículos marcados como 'uploaded_document' son documentos subidos
+    # por el usuario: siempre se conservan en el grafo
+    upload_titles = set()
     with open(transformed_path, 'r', encoding='utf-8') as f:
         transformed_data = json.load(f)
         article_titles = []
@@ -332,6 +335,8 @@ def generate_graph_data(chunks_path: str, entities_path: str, transformed_path: 
             for article in transformed_data:
                 if isinstance(article, dict) and 'title' in article:
                     article_titles.append(article['title'])
+                    if 'uploaded_document' in (article.get('categories') or []):
+                        upload_titles.add(article['title'])
         elif isinstance(transformed_data, dict):
             # Si es diccionario, las claves son títulos
             article_titles = list(transformed_data.keys())
@@ -384,7 +389,9 @@ def generate_graph_data(chunks_path: str, entities_path: str, transformed_path: 
             kept_related = [t for t, _, _ in scored[:MAX_RELATED_ARTICLES]]
 
             # Mantener el orden original del pipeline para títulos conservados
-            kept_set = set(kept_related) | {main_article}
+            # Los uploads del usuario siempre se conservan (contenido elegido
+            # explícitamente, no depende de la relevancia al tema principal)
+            kept_set = set(kept_related) | {main_article} | upload_titles
             kept_titles = [t for t in article_titles if t in kept_set]
 
             print(f"  Artículo principal: {main_article}")
@@ -408,9 +415,11 @@ def generate_graph_data(chunks_path: str, entities_path: str, transformed_path: 
         node_id = f'article_{i}'
         node_id_map[title] = node_id
 
-        # Colores: principal dorado, relacionados gris/azul
+        # Colores: principal dorado, uploads morado, relacionados azul
         if title == kept_titles[0]:
             color = '#FFD700'  # Dorado para artículo principal
+        elif title in upload_titles:
+            color = '#C678DD'  # Morado para documentos subidos
         else:
             color = '#61AFEF'  # Azul para artículos relacionados
 

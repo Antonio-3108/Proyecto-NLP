@@ -33,6 +33,7 @@ data/uploads/
 
 # Archivos temporales y de respuesta de pruebas
 resp*.json
+server_log.txt
 *.tmp
 *.bak
 

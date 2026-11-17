@@ -52,6 +52,21 @@ def get_generator():
     return _generator
 
 
+def _clear_data_dirs():
+    """Elimina todo el contenido de data/uploads, data/raw y data/processed."""
+    base_dir = Path(__file__).parent
+    deleted = 0
+    for data_subdir in (base_dir / "data" / "uploads",
+                        base_dir / "data" / "raw",
+                        base_dir / "data" / "processed"):
+        if data_subdir.exists():
+            for f in data_subdir.iterdir():
+                if f.is_file():
+                    f.unlink()
+                    deleted += 1
+    return deleted
+
+
 class KnowledgeHandler(SimpleHTTPRequestHandler):
     """Handler personalizado para servir la aplicación y la API."""
 
@@ -95,6 +110,10 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
             self.handle_file_upload()
             return
 
+        if parsed_path.path == '/api/reset':
+            self.handle_reset()
+            return
+
         self.send_error(404)
 
     def handle_ask_request(self, params):
@@ -134,7 +153,7 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
             result = subprocess.run(
                 [sys.executable, str(pipeline_path)],
                 input=f"{topic}\n",  # Tema + enter para defaults
-                stdout=subprocess.DEVNULL,  # No capturar stdout
+                # stdout heredado: el progreso del pipeline se ve en la consola
                 stderr=subprocess.PIPE,    # Capturar errores
                 text=True,
                 cwd=str(base_dir),
@@ -151,7 +170,6 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
             generate_script = base_dir / "generate_graph_data.py"
             graph_result = subprocess.run(
                 [sys.executable, str(generate_script)],
-                stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=str(base_dir)
@@ -243,6 +261,20 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
             print(f"Error procesando archivos: {e}")
             self.send_json_response({'error': str(e)})
 
+    def handle_reset(self):
+        """Elimina uploads, datos raw y procesados (nueva exploración)."""
+        try:
+            deleted = _clear_data_dirs()
+            print(f"Reset completo: {deleted} archivos eliminados")
+            self.send_json_response({
+                'success': True,
+                'message': 'Datos eliminados. Listo para una nueva exploración.'
+            })
+
+        except Exception as e:
+            print(f"Error en reset: {e}")
+            self.send_json_response({'error': str(e)})
+
     def handle_process_uploads(self):
         """Ejecuta process_uploads.py para fusionar documentos con el corpus."""
         try:
@@ -251,7 +283,6 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
 
             result = subprocess.run(
                 [sys.executable, str(script_path)],
-                stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=str(base_dir),
@@ -268,7 +299,6 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
             generate_script = base_dir / "generate_graph_data.py"
             graph_result = subprocess.run(
                 [sys.executable, str(generate_script)],
-                stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=str(base_dir)
@@ -292,11 +322,15 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
 
     def process_question(self, query):
         """Procesa una pregunta usando Ollama."""
+        import time
+        start = time.time()
         try:
             generator = get_generator()
 
             # Procesar pregunta
             result = generator.answer_question(query)
+            elapsed = time.time() - start
+            print(f"[/api/ask] '{query[:60]}' -> {elapsed:.1f}s | source={result.get('source')} | top_sim={result.get('top_similarity', 0):.3f}")
 
             # Extraer artículos relevantes de los chunks
             relevant_articles = list(set([chunk.get('article', '') for chunk in result.get('chunks', [])]))
@@ -327,8 +361,10 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode('utf-8'))
 
     def log_message(self, format, *args):
-        """Personaliza el log de mensajes."""
-        print(f"{self.address_string()} - {format % args}")
+        """Log de requests HTTP con timestamp."""
+        from datetime import datetime
+        ts = datetime.now().strftime('%H:%M:%S')
+        print(f"[{ts}] {self.address_string()} - {format % args}")
 
 
 def warmup_generator():
@@ -342,6 +378,12 @@ def warmup_generator():
 
 def main():
     """Función principal del servidor."""
+    # Limpiar datos de sesiones anteriores: cada inicio del servidor
+    # comienza con una base de conocimiento vacía
+    deleted = _clear_data_dirs()
+    if deleted:
+        print(f"Inicio: {deleted} archivos de datos anteriores eliminados")
+
     port = 8000
     server_address = ('', port)
     httpd = ThreadingHTTPServer(server_address, KnowledgeHandler)

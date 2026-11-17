@@ -3,6 +3,9 @@ Procesa los documentos subidos en data/uploads/ y los fusiona con el corpus
 procesado existente (o crea el corpus si no existe ninguno).
 
 Se usa cuando el usuario sube archivos sin ingresar un tema de Wikipedia.
+Los documentos se re-derivan por completo en cada ejecución: los artículos
+marcados como 'uploaded_document' se reemplazan por la versión actual de
+data/uploads/.
 """
 
 import os
@@ -27,6 +30,10 @@ from data_transformation import DataTransformer
 from semantic_analyzer import SemanticAnalyzer
 
 
+def _is_upload(article: dict) -> bool:
+    return 'uploaded_document' in (article.get('categories') or [])
+
+
 def main():
     uploads_dir = base_dir / "data" / "uploads"
     processed_dir = base_dir / "data" / "processed"
@@ -37,7 +44,7 @@ def main():
     embeddings_path = processed_dir / "chunks_embeddings.json"
     entities_path = processed_dir / "entities.json"
 
-    # 1. Cargar documentos subidos
+    # 1. Cargar documentos subidos (divididos por tema)
     print("=" * 60)
     print("PROCESANDO DOCUMENTOS SUBIDOS")
     print("=" * 60)
@@ -47,23 +54,28 @@ def main():
         print("No hay documentos para procesar en data/uploads/")
         return
 
-    # 2. Cargar corpus existente (si hay)
+    # 2. Cargar corpus existente, separando uploads viejos de artículos wiki
     existing_transformed = []
     if transformed_path.exists():
         with open(transformed_path, 'r', encoding='utf-8') as f:
             existing_transformed = json.load(f)
         print(f"Corpus existente: {len(existing_transformed)} artículos")
 
-    existing_titles = {a['title'] for a in existing_transformed}
+    wiki_articles = [a for a in existing_transformed if not _is_upload(a)]
+    old_upload_titles = {a['title'] for a in existing_transformed if _is_upload(a)}
+    wiki_titles = {a['title'] for a in wiki_articles}
 
-    # 3. Transformar solo los documentos nuevos
+    if old_upload_titles:
+        print(f"Reemplazando {len(old_upload_titles)} artículo(s) de uploads anteriores")
+
+    # 3. Transformar los documentos subidos (los uploads se re-derivan siempre)
     transformer = DataTransformer(str(base_dir / "data" / "raw" / "main_article.json"))
     analyzer = SemanticAnalyzer()
 
     new_transformed = []
     for article in uploaded_articles:
-        if article['title'] in existing_titles:
-            print(f"  Ya existe, se omite: {article['title']}")
+        if article['title'] in wiki_titles:
+            print(f"  Colisión con artículo existente, se omite: {article['title']}")
             continue
         print(f"Transformando: {article['title']}")
         transformed = transformer.transform_article(article)
@@ -73,8 +85,8 @@ def main():
         print("No hay documentos nuevos que procesar.")
         return
 
-    # 4. Fusionar con el corpus existente
-    all_transformed = existing_transformed + new_transformed
+    # 4. Fusionar: wiki existentes + uploads actuales
+    all_transformed = wiki_articles + new_transformed
 
     with open(transformed_path, 'w', encoding='utf-8') as f:
         json.dump(all_transformed, f, ensure_ascii=False, indent=2)
@@ -94,11 +106,15 @@ def main():
     chunks_df.to_csv(chunks_path, index=False, encoding='utf-8')
     print(f"Chunks totales: {len(chunks_df)}")
 
-    # 5. Embeddings y NER solo para los nuevos artículos
+    # 5. Embeddings y NER: purgar uploads viejos, agregar los nuevos
     existing_embeddings = []
     if embeddings_path.exists():
         with open(embeddings_path, 'r', encoding='utf-8') as f:
             existing_embeddings = json.load(f)
+    existing_embeddings = [
+        e for e in existing_embeddings
+        if e.get('article_title') not in old_upload_titles
+    ]
 
     existing_entities = {}
     existing_concepts = {}
@@ -107,15 +123,16 @@ def main():
             entities_data = json.load(f)
             existing_entities = entities_data.get('entities', {})
             existing_concepts = entities_data.get('concepts', {})
+    for t in old_upload_titles:
+        existing_entities.pop(t, None)
+        existing_concepts.pop(t, None)
 
-    new_chunk_ids = set()
     for article in new_transformed:
         title = article['title']
         print(f"\nGenerando embeddings/NER: {title}")
 
         for i, chunk in enumerate(article['chunks']):
             embedding = analyzer.get_chunk_embedding(chunk)
-            new_chunk_ids.add(f"{title}_{i}")
             existing_embeddings.append({
                 'chunk_id': f"{title}_{i}",
                 'chunk_text': chunk,
@@ -140,7 +157,7 @@ def main():
     print("\n" + "=" * 60)
     print("DOCUMENTOS PROCESADOS EXITOSAMENTE")
     print("=" * 60)
-    print(f"Nuevos artículos: {len(new_transformed)}")
+    print(f"Artículos de uploads: {len(new_transformed)}")
     print(f"Total en corpus: {len(all_transformed)} artículos")
     print(f"Total de chunks: {len(chunks_df)}")
 
