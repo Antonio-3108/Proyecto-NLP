@@ -19,6 +19,9 @@ ENV/
 data/raw/
 data/processed/
 
+# Documentos subidos por el usuario (archivos locales del usuario)
+data/uploads/
+
 # Cache de pytest
 .pytest_cache/
 

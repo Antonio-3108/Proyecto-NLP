@@ -351,7 +351,7 @@ def generate_graph_data(chunks_path: str, entities_path: str, transformed_path: 
             article_texts[title] = ' '.join([chunk['text'] for chunk in chunks[:4]])[:8000]
 
     # Filtrar artículos: conservar solo los más relevantes respecto al principal
-    MAX_RELATED_ARTICLES = 7   # Artículos relacionados máximos en el grafo
+    MAX_RELATED_ARTICLES = 12   # Artículos relacionados máximos en el grafo
     kept_titles = list(article_titles)
     relevance_scores = {}
 

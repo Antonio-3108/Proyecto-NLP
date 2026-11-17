@@ -544,16 +544,16 @@
                 <!-- Pantalla de inicio -->
                 <div class="welcome-screen" id="welcomeScreen">
                     <h2>Explorador de Conocimiento</h2>
-                    <p>Ingresa un tema para explorar artículos de Wikipedia o sube tus propios documentos.</p>
+                    <p>Ingresa un tema para explorar.</p>
 
                     <!-- Cuadro de texto para tema -->
                     <div style="width: 100%; max-width: 500px; margin-bottom: 20px;">
-                        <input type="text" id="topicInput" placeholder="Ingresa un tema (ej: Satoru Iwata, Nintendo, Machine Learning)..." style="width: 100%; padding: 12px; background-color: #2F343E; border: 1px solid #464B57; border-radius: 4px; color: #DCE0E5; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;">
+                        <input type="text" id="topicInput" placeholder="Ingresa un tema..." style="width: 100%; padding: 12px; background-color: #2F343E; border: 1px solid #464B57; border-radius: 4px; color: #DCE0E5; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;">
                     </div>
 
                     <!-- Área para subir archivos -->
                     <div class="file-upload-section" style="width: 100%; max-width: 500px; margin-bottom: 20px;">
-                        <p>O sube tus propios documentos (.txt, .md, .pdf)</p>
+                        <p>Sube tus propios documentos (.txt, .md, .pdf)</p>
                         <input type="file" id="fileInput" multiple accept=".txt,.md,.pdf" style="display: none;">
                         <button class="file-upload-btn" onclick="document.getElementById('fileInput').click()">Seleccionar Archivos</button>
                         <div id="selectedFiles" style="margin-top: 10px; color: #A9AFBC; font-size: 12px;"></div>
@@ -675,19 +675,20 @@
             document.getElementById('loadingSubtext').textContent = 'Esto puede tomar unos minutos...';
 
             try {
-                // Si hay tema, procesar con pipeline
+                // 1. Guardar archivos en data/uploads/ (si hay)
+                if (selectedFiles.length > 0) {
+                    document.getElementById('loadingSubtext').textContent = 'Guardando archivos...';
+                    await processFiles();
+                }
+
+                // 2. Con tema: el pipeline incluye los uploads automáticamente.
+                //    Sin tema: fusionar solo los documentos con el corpus.
                 if (topic) {
                     document.getElementById('loadingSubtext').textContent = 'Extrayendo artículos de Wikipedia...';
                     await processTopic(topic);
-
-                    document.getElementById('loadingSubtext').textContent = 'Generando embeddings y NER...';
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Simular delay
-                }
-
-                // Si hay archivos, procesarlos
-                if (selectedFiles.length > 0) {
-                    document.getElementById('loadingSubtext').textContent = 'Procesando archivos...';
-                    await processFiles();
+                } else if (selectedFiles.length > 0) {
+                    document.getElementById('loadingSubtext').textContent = 'Procesando documentos...';
+                    await processUploads();
                 }
 
                 document.getElementById('loadingSubtext').textContent = 'Generando grafo de relaciones...';
@@ -734,6 +735,21 @@
             const response = await fetch('/api/upload', {
                 method: 'POST',
                 body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            return data;
+        }
+
+        async function processUploads() {
+            // Fusionar los documentos guardados en data/uploads/ con el corpus
+            const response = await fetch('/api/process_uploads', {
+                method: 'POST'
             });
 
             const data = await response.json();

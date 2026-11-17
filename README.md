@@ -54,6 +54,14 @@ python server.py
 
 Abrir `http://localhost:8000/app.html`, ingresar un tema, hacer clic en "Iniciar Exploración" y luego preguntar.
 
+También se pueden subir documentos propios (`.txt`, `.md`, `.pdf`):
+
+- Se guardan en `data/uploads/` (los nombres duplicados se renombran con `_1`, `_2`...)
+- Se procesan **igual que los artículos de Wikipedia**: extracción de texto → limpieza → chunking → embeddings → NER → corpus y grafo
+- **Con tema + archivos**: el pipeline incluye los uploads automáticamente en la misma corrida
+- **Solo archivos** (sin tema): se fusionan con el corpus existente vía `process_uploads.py`
+- Los documentos persisten en `data/uploads/` y se incluyen en cada procesamiento de tema posterior
+
 ### Pipeline manual
 
 ```bash
@@ -74,7 +82,8 @@ pytest tests/ -v
 | `/api/ask?q=...` | GET | Responder pregunta |
 | `/api/ask` | POST | `{query: "..."}` |
 | `/api/process_topic?topic=...` | GET | Ejecutar pipeline para un tema |
-| `/api/upload` | POST | Subir archivos (multipart) |
+| `/api/upload` | POST | Guardar archivos en `data/uploads/` (multipart) |
+| `/api/process_uploads` | POST | Fusionar uploads con el corpus y regenerar grafo |
 
 ## Notas
 

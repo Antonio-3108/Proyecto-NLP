@@ -87,6 +87,10 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
             self.handle_ask_post(data)
             return
 
+        if parsed_path.path == '/api/process_uploads':
+            self.handle_process_uploads()
+            return
+
         if parsed_path.path == '/api/upload':
             self.handle_file_upload()
             return
@@ -171,65 +175,119 @@ class KnowledgeHandler(SimpleHTTPRequestHandler):
             self.send_json_response({'error': str(e)})
 
     def handle_file_upload(self):
-        """Maneja la subida de archivos."""
+        """Guarda los archivos subidos en data/uploads/ para procesarlos."""
         try:
-            # Parsear multipart/form-data
             content_type = self.headers.get('Content-Type', '')
             if 'multipart/form-data' not in content_type:
                 self.send_json_response({'error': 'Invalid content type'})
                 return
 
-            # Leer el body
             content_length = int(self.headers['Content-Length'])
             body = self.rfile.read(content_length)
 
-            # Parsear archivos (simplificado)
-            files_processed = []
-
-            # Guardar archivos en directorio temporal
-            import tempfile
             import os
+            uploads_dir = Path(__file__).parent / "data" / "uploads"
+            uploads_dir.mkdir(parents=True, exist_ok=True)
 
-            temp_dir = tempfile.mkdtemp()
             boundary = content_type.split('boundary=')[1].encode()
-
-            # Parsear partes del multipart
             parts = body.split(b'--' + boundary)
 
+            saved_files = []
+            supported = {'.txt', '.md', '.pdf'}
+
             for part in parts:
-                if b'filename=' in part:
-                    # Extraer nombre del archivo (sanitizar para evitar path traversal)
-                    import os
-                    filename_start = part.find(b'filename="') + 10
-                    filename_end = part.find(b'"', filename_start)
-                    filename = part[filename_start:filename_end].decode('utf-8')
-                    filename = os.path.basename(filename)  # Solo el nombre, sin rutas
+                if b'filename=' not in part:
+                    continue
 
-                    # Extraer contenido
-                    content_start = part.find(b'\r\n\r\n') + 4
-                    content_end = part.rfind(b'\r\n--')
-                    content = part[content_start:content_end]
+                # Extraer nombre del archivo (sanitizar para evitar path traversal)
+                filename_start = part.find(b'filename="') + 10
+                filename_end = part.find(b'"', filename_start)
+                filename = part[filename_start:filename_end].decode('utf-8')
+                filename = os.path.basename(filename)
 
-                    # Guardar archivo
-                    file_path = os.path.join(temp_dir, filename)
-                    with open(file_path, 'wb') as f:
-                        f.write(content)
+                ext = os.path.splitext(filename)[1].lower()
+                if ext not in supported:
+                    print(f"  Archivo no soportado, se omite: {filename}")
+                    continue
 
-                    # Procesar archivo (simulado por ahora)
-                    files_processed.append({
-                        'name': filename,
-                        'chunks': 10,  # Simulado
-                        'path': file_path
-                    })
+                # Extraer contenido
+                content_start = part.find(b'\r\n\r\n') + 4
+                content_end = part.rfind(b'\r\n--')
+                content = part[content_start:content_end]
+
+                # Guardar en data/uploads (evitar sobrescribir)
+                file_path = uploads_dir / filename
+                counter = 1
+                while file_path.exists():
+                    stem, e = os.path.splitext(filename)
+                    file_path = uploads_dir / f"{stem}_{counter}{e}"
+                    counter += 1
+
+                with open(file_path, 'wb') as f:
+                    f.write(content)
+
+                saved_files.append(file_path.name)
+                print(f"  Archivo guardado: {file_path.name} ({len(content)} bytes)")
+
+            if not saved_files:
+                self.send_json_response({'error': 'No se encontraron archivos válidos (.txt, .md, .pdf)'})
+                return
 
             self.send_json_response({
                 'success': True,
-                'files': files_processed,
-                'message': f'{len(files_processed)} archivos procesados'
+                'files': saved_files,
+                'message': f'{len(saved_files)} archivo(s) guardado(s) en data/uploads/'
             })
 
         except Exception as e:
             print(f"Error procesando archivos: {e}")
+            self.send_json_response({'error': str(e)})
+
+    def handle_process_uploads(self):
+        """Ejecuta process_uploads.py para fusionar documentos con el corpus."""
+        try:
+            base_dir = Path(__file__).parent
+            script_path = base_dir / "process_uploads.py"
+
+            result = subprocess.run(
+                [sys.executable, str(script_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=str(base_dir),
+                timeout=600
+            )
+
+            if result.returncode != 0:
+                print(f"Error procesando uploads: {result.stderr}")
+                self.send_json_response({'error': f'Upload processing failed: {result.stderr}'})
+                return
+
+            # Regenerar datos del grafo
+            print("Regenerando datos del grafo...")
+            generate_script = base_dir / "generate_graph_data.py"
+            graph_result = subprocess.run(
+                [sys.executable, str(generate_script)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=str(base_dir)
+            )
+
+            if graph_result.returncode != 0:
+                print(f"Error generando grafo: {graph_result.stderr}")
+                self.send_json_response({'error': f'Graph generation failed: {graph_result.stderr}'})
+                return
+
+            self.send_json_response({
+                'success': True,
+                'message': 'Documentos procesados exitosamente'
+            })
+
+        except subprocess.TimeoutExpired:
+            self.send_json_response({'error': 'Upload processing timed out'})
+        except Exception as e:
+            print(f"Error procesando uploads: {e}")
             self.send_json_response({'error': str(e)})
 
     def process_question(self, query):

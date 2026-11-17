@@ -23,6 +23,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src', 'embeddings'))
 from wikipedia_extractor import WikipediaExtractor
 from data_transformation import DataTransformer
 from semantic_analyzer import SemanticAnalyzer
+from document_loader import load_uploaded_documents
 
 
 class KnowledgePipeline:
@@ -210,8 +211,17 @@ class KnowledgePipeline:
         print("PASO 5: Transformación de todos los artículos")
         print("="*60)
 
+        # Documentos subidos por el usuario (data/uploads/) se procesan
+        # igual que los artículos de Wikipedia
+        uploads_dir = self.base_dir / "data" / "uploads"
+        uploaded_articles = load_uploaded_documents(uploads_dir)
+        if uploaded_articles:
+            print(f"Documentos subidos incluidos: {len(uploaded_articles)}")
+
         # Combinar artículos y eliminar duplicados por título
-        all_articles = [main_article] + related_articles
+        # Orden: principal -> uploads -> relacionados (uploads cerca del principal
+        # para que tengan buen puntaje de relevancia en el grafo)
+        all_articles = [main_article] + uploaded_articles + related_articles
 
         # Eliminar duplicados por título
         seen_titles = set()
@@ -321,7 +331,7 @@ class KnowledgePipeline:
             'concepts': all_concepts
         }
 
-    def run_pipeline(self, topic: str, max_related: int = 10, max_depth: int = 1):
+    def run_pipeline(self, topic: str, max_related: int = 15, max_depth: int = 2):
         """
         Ejecuta el pipeline completo.
 
